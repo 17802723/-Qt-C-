@@ -19,7 +19,7 @@
 #include <QTextDocument>
 #include <QTextBlock>
 //QString chat_server::server_ip = "192.168.202.132";
-QString chat_server::server_ip = "47.122.48.34";
+QString chat_server::server_ip = "";
 
 int chat_server::server_port = 1145;
 
