@@ -1,0 +1,14 @@
+<RCC>
+    <qresource prefix="/picture.">
+        <file>logginBack.gif</file>
+        <file>lock.png</file>
+        <file>unlock.png</file>
+        <file>user.png</file>
+        <file>chat.png</file>
+        <file>CheckUser.png</file>
+        <file>unCheckUser.png</file>
+        <file>checkChat.png</file>
+        <file>uncheckChat.png</file>
+    </qresource>
+    <qresource prefix="/picture"/>
+</RCC>

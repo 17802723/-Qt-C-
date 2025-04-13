@@ -1,0 +1,9 @@
+<RCC>
+    <qresource prefix="/qml"/>
+    <qresource prefix="/">
+        <file>chat.qml</file>
+        <file>ImagePreview.qml</file>
+        <file>FilePreview.qml</file>
+        <file>VoiceChatView.qml</file>
+    </qresource>
+</RCC>
