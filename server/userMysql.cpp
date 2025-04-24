@@ -140,6 +140,11 @@ int userDB::checkLogin(const string& username, const string& inputPassword)
 
 std::string userDB::serachUserId(const string& userName)
 {
+    if(userName.empty())
+    {
+        std::cout << "用户名为空\n";
+        return "";
+    }
     string query = "SELECT id FROM users WHERE username = '" + userName + "'" ;  
     res = fetchResults(query);
     if (res)
@@ -226,7 +231,11 @@ void userDB::insertFrienaRequestTo()
         {
             int status = -1;
             std::string id = serachUserId(client[i]->userName);
-            
+            if(id.empty())
+            {
+                std::cout << "用户不存在\n";
+                continue;
+            }
             std::string sender = row[0];
             std::string receiver = row[1];
             std::string sta = row[2];
@@ -252,6 +261,11 @@ void userDB::changeFriendRequestState(const string& senderName , const string& r
 {
     std::string senderId = serachUserId(senderName);
     std::string receiverId = serachUserId(receiveName);
+    if(senderId.empty() || receiverId.empty())
+    {
+        std::cout << "用户不存在\n";
+        return;
+    }
     std::string status = (state == 1) ? "accepted" : "rejected" ;
     std::string query = "update friend_requests set status = '" + status +"' where sender_id = " + senderId + " and receiver_id = " + receiverId;
     bool isInsert = executeQuery(query);  // 执行插入操作

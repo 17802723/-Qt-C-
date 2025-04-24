@@ -16,7 +16,15 @@
 #include <QGuiApplication> // GUI应用程序基础头文件
 #include <QMimeData>
 #include "audio.h"
+#include "videochatwidget.h"
+#include <winsock2.h>
+#pragma comment(lib, "ws2_32.lib")
 
+#ifdef _WIN32
+#include <winsock2.h>
+#else
+#include <arpa/inet.h>
+#endif
 
 
 
@@ -45,7 +53,10 @@ enum MessageType {
     acceptChatRequestHeader = 21 , //接收到通讯请求
     responeVoiceChatHeader = 22, //回应电话通讯
     voiceChatRespone = 23 , //服务器给客户端回应语音消息
-    transAudioToServer = 24 //客户端传输音频出去
+    transAudioToServer = 24, //客户端传输音频出去
+    videoChatRespone = 25 , //视频通话请求
+    videChaiHuiYing = 26 , //回应视频通话
+    videoSocketBiaoZhu = 27 //标明当前socket是用于传输视频帧的
 
 };
 
@@ -208,8 +219,15 @@ private:
     AudioHandler* audioChat;
     QFile* AudioFile;
     asio::ip::tcp::socket* SendAudioSocekt;//发送音频的socket
-    asio::ip::tcp::socket* ReciverAudioSocekt;//接受音频的socket
+    asio::ip::tcp::socket* ReciverAudioSocekt;
+    asio::ip::tcp::socket* videoSocket = nullptr; //视频通话接受发送视频帧数据
     QString audioChatName ;
+    videoChatWidget* videoChat;//视频通话窗口
+    bool isTransVideo = false;
+    bool shiPinCishu = false;//有没有视频过，用于判断是否需要再次connect的
+    asio::ip::tcp::socket* videoSocket_audio = nullptr; //视频通话中语音通话的socket
+    bool isVideoChat_audio = false ; //用于判断视频通话中的语音通话是否有在运行
+
 
 public:
     //创建 io_context，负责执行异步操作
@@ -231,6 +249,11 @@ public:
     void stopAudioChat();
     void startAcceptAudio();
     void stopvideo();
+    void sendVideoChatStatusChange(int index);//当视频通话接受、拒绝、结束时
+    void startVideoChat();
+    void acceptVideoMessage();
+    void startVideoChat_audio();//视频通话时候中的语音通话实现
+    void startAcceptVideo_audio();//获取视频通话时的音频数据
 
     Q_INVOKABLE  bool searchUser(const QString& userName);
     Q_INVOKABLE QString getUserName(){return QString::fromStdString(username);}
@@ -252,7 +275,7 @@ public:
     Q_INVOKABLE void sendVoiceChat(QString senderName , QString receiverName);
     Q_INVOKABLE void responeVoicdChat(QString senderName , QString receiverName , uint16_t status_code);//回应电话通讯
     Q_INVOKABLE void sendFile_tuoru(QString filePath , const QString& receiverName , const QString& senderName);
-
+    Q_INVOKABLE void sendVideoChat(QString senderName , QString receiverName);
 
 signals:
     void serachFriendRes(bool successStatus);//发去qml的信号，通知是否成功搜索到好友
@@ -270,6 +293,8 @@ signals:
     void requestStartCapture();
     void requestStopCapture();
     void stopAudio();
+    void videoChat_new();
+    void videoChat_audio();
 
 
 

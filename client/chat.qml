@@ -24,6 +24,7 @@ ApplicationWindow {
     property color messageInColor: "#FFFFFF"     // 收到消息气泡颜色
     property int defaultRadius: 8                // 默认圆角大小
     property int defaultMargin: 10               // 默认边距
+    property bool isVideoChat: false
 
 
 
@@ -1078,11 +1079,60 @@ ApplicationWindow {
 
 
                 Button {
-                    id: voiceCallButton
+                    id: videoallButton
                     width: 40
                     height: 40
                     anchors.right: parent.right
                     anchors.rightMargin: 15
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: currentChat ? true : false
+
+                    background: Rectangle {
+                        radius: 20
+                        color: voiceCallButton.pressed ? Qt.darker(primaryColor, 1.2) :
+                               voiceCallButton.hovered ? primaryColor : Qt.lighter(primaryColor, 1.1)
+
+                        // 添加过渡动画
+                        Behavior on color {
+                            ColorAnimation { duration: 100 }
+                        }
+                    }
+
+                    contentItem: Text {
+                        text: "📷"
+                        font.pixelSize: 18
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        color: "white"
+                    }
+
+                    ToolTip.visible: hovered
+                    ToolTip.text: "发起视频通话"
+                    ToolTip.delay: 500
+
+                    onClicked: {
+                        // 打开语音通话窗口
+                        if(chatVoice.visible === false)
+                        {
+                           if(isVideoChat === false)
+                           {
+                               console.log("视频通话")
+                               server.sendVideoChat(username , currentChat)
+                           }
+                        }
+                    }
+
+
+                    hoverEnabled: !chatVoice.visible
+                }
+
+
+                Button {
+                    id: voiceCallButton
+                    width: 40
+                    height: 40
+                    anchors.right: videoallButton.left
+                    anchors.rightMargin: 5
                     anchors.verticalCenter: parent.verticalCenter
                     visible: currentChat ? true : false
 

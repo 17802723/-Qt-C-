@@ -24,7 +24,7 @@ endif()
 
 
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets Quick Qml )
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Quick Qml quickwidgets  Gui Multimedia)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Quick Qml quickwidgets  Gui Multimedia MultimediaWidgets )
 
 
 #这里更改为asio库的实际位置
@@ -49,7 +49,8 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         chat_server.h chat_server.cpp
         qml.qrc
         audio.h audio.cpp
-        videohandler.h videohandler.cpp
+
+        videochatwidget.h videochatwidget.cpp videochatwidget.ui
 
     )
 
@@ -80,7 +81,7 @@ else()
 endif()
 
 
-target_link_libraries(chatApp PRIVATE Qt${QT_VERSION_MAJOR}::Widgets Qt6::Qml Qt6::Quick Qt6::QuickWidgets  ws2_32 Qt6::Gui Qt6::Multimedia)
+target_link_libraries(chatApp PRIVATE Qt${QT_VERSION_MAJOR}::Widgets Qt6::Qml Qt6::Quick Qt6::QuickWidgets Qt6::Multimedia Qt6::MultimediaWidgets  ws2_32 )
 
 # Qt for iOS sets MACOSX_BUNDLE_GUI_IDENTIFIER automatically since Qt 6.1.
 

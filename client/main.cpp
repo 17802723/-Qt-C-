@@ -10,10 +10,10 @@
 #include <QLoggingCategory>
 int main(int argc, char *argv[])
 {
+    QApplication a(argc, argv);
 
     // 启用 QML 调试输出
     QLoggingCategory::setFilterRules("qt.qml.connections=true");
-    QApplication a(argc, argv);
     ShadowWindow w;
     w.show();
 

@@ -333,9 +333,9 @@ void ChatClient::acceptMessage()
                         std::cout << '\n' << name <<"的文件socket接入\n";
                         cli->fileSocekt[fileName] = clientSocket;
                         cli->acceptFileMessage(cli->fileSizeAll[fileName] , cli->outFile[fileName] , fileName);
-                        auto it = std::find(client.begin(), client.end(), this);
-                        client.erase(it);       
-                        delete this;
+                        // auto it = std::find(client.begin(), client.end(), this);
+                        // client.erase(it);       
+                        // delete this;
                     }
                 }
              }
@@ -449,6 +449,70 @@ void ChatClient::acceptMessage()
 
                 acceptAudioMessage();
              }
+             else if(header->message_type == videoChatRespone)
+             {
+                delete header;
+                addFrirendReauest* FrirendRequest_1 = new addFrirendReauest  ;
+                std::memset(FrirendRequest_1->ReceiverName , '\0' , sizeof(FrirendRequest_1->ReceiverName));
+                std::memset(FrirendRequest_1->SenderName , '\0' , sizeof(FrirendRequest_1->SenderName));
+                asio::async_read(*clientSocket,
+                    asio::buffer(FrirendRequest_1, sizeof(addFrirendReauest)),
+                    [& , FrirendRequest_1](asio::error_code ec, size_t length)
+                    { 
+                        std::cout << "用户:" << FrirendRequest_1->SenderName << "向" << FrirendRequest_1->ReceiverName << "发起视频通话请求\n"; 
+                        for(auto& cli : client)
+                        {
+                            if(cli->userName == FrirendRequest_1->ReceiverName)
+                            {
+                                cli->sendVideoChatRequest(FrirendRequest_1->SenderName , FrirendRequest_1->ReceiverName);
+                                break;
+                            }
+                        }
+                        acceptMessage();
+                    }
+                );
+             }
+             else if(header->message_type == videChaiHuiYing)
+             {
+                FrirendRequest = new addFrirendReauest  ;
+                std::memset(FrirendRequest->ReceiverName , '\0' , sizeof(FrirendRequest->ReceiverName));
+                std::memset(FrirendRequest->SenderName , '\0' , sizeof(FrirendRequest->SenderName));
+                asio::async_read(*clientSocket,
+                    asio::buffer(FrirendRequest, sizeof(addFrirendReauest)),
+                    [&](asio::error_code ec, size_t length)
+                    { 
+                        int status;
+                        asio::read(*clientSocket , asio::buffer(&status , sizeof(int)));
+                        std::cout << "用户:" << FrirendRequest->SenderName << "向" << FrirendRequest->ReceiverName << "回应视频通话请求:" << status << '\n';
+                        std::cout  << "接受视频通话请求:" << status << '\n';
+                        for(auto& cli : client)
+                        {
+                            if(cli->userName == FrirendRequest->ReceiverName)
+                            {
+                                cli->acceptVideoChatRequest(status);
+                                break;
+                            }
+                        }
+                        acceptMessage();
+                    }
+                );
+             }
+             else if(header->message_type == videoSocketBiaoZhu)
+             {
+                FrirendRequest = new addFrirendReauest  ;
+                std::memset(FrirendRequest->ReceiverName , '\0' , sizeof(FrirendRequest->ReceiverName));
+                std::memset(FrirendRequest->SenderName , '\0' , sizeof(FrirendRequest->SenderName));
+                asio::async_read(*clientSocket,
+                    asio::buffer(FrirendRequest, sizeof(addFrirendReauest)),
+                    [&](asio::error_code ec, size_t length)
+                    { 
+                        std::cout << "当前用户:" << FrirendRequest->SenderName << "向" << FrirendRequest->ReceiverName << "准备发送视频数据\n";
+                        videoChatName = FrirendRequest->ReceiverName;
+                        videoChatCurrentName = FrirendRequest->SenderName;
+                        receiveVideoImage();
+                    }
+                );
+             }
 
              else 
              {
@@ -458,6 +522,128 @@ void ChatClient::acceptMessage()
         }
     });
 }
+
+void ChatClient::receiveVideoImage()
+{
+    int* size = new int;
+    asio::async_read(*clientSocket, asio::buffer(size, sizeof(int)), [this, size](asio::error_code ec, size_t length){
+        if(ec)
+        {
+            try
+            {
+                throw asio::system_error(ec);
+            }
+            catch(const std::exception& e)
+            {
+                std::cerr << "System error: " << e.what() << ", Error code: "<<ec.value()  << std::endl;
+                for(auto& tmp : client) {
+                    if(tmp->videoChatCurrentName == videoChatName) {
+                        //tmp->sendVideoImage(size, video_buffer);
+                        int fin = -1;
+                        asio::write(*(tmp->clientSocket), asio::buffer(&fin, sizeof(int)));
+                        break;
+                    }
+                }
+                auto it = std::find(client.begin(), client.end(), this);
+                client.erase(it);       
+                delete this;
+            }
+            return;
+        }
+        if(*size == -1) {
+            std::cout << "结束视频传输";
+            auto it = std::find(client.begin(), client.end(), this);
+            client.erase(it);  
+            delete size; // 结束传输时释放内存
+            return;   
+        }
+        // 添加合理性检查，防止分配过大内存
+        const int MAX_ALLOWED_SIZE = 10 * 1024 * 1024; // 例如限制为10MB
+        bool is ;
+        if(*size <= 0 || *size > MAX_ALLOWED_SIZE) {
+            std::cout << "接收到无效的视频数据大小: " << videoChatCurrentName << "发给" << videoChatName << "的视频：" << *size << "视频数据\n";
+            is = false;
+            auto it = std::find(client.begin(), client.end(), this);
+            client.erase(it);       
+            delete this;
+            return;
+        }
+        else
+        {
+            is = true;
+        }
+
+        std::vector<char>* video_buffer = new std::vector<char>(*size + 10);
+        std::memset(video_buffer->data(), '\0', *size + 10);        
+        asio::async_read(*clientSocket, asio::buffer(video_buffer->data(), *size), [this, size , video_buffer ,is](asio::error_code ec, size_t length){
+            
+            std::cout << "接收到：" << videoChatCurrentName << "发给" << videoChatName << "的视频：" << *size << "视频数据\n";
+            
+            if(is == true)
+            {
+                for(auto& tmp : client) {
+                    if(tmp->videoChatCurrentName == videoChatName) {
+                        //tmp->sendVideoImage(size, video_buffer);
+                        asio::write(*(tmp->clientSocket), asio::buffer(size, sizeof(int)));
+                        asio::write(*(tmp->clientSocket), asio::buffer(video_buffer->data(), *size));
+
+                        break;
+                    }
+                }
+            }
+            
+            delete video_buffer;
+            delete size;
+
+            // 继续接收下一帧
+            receiveVideoImage();
+        });
+    });
+}
+
+void ChatClient::sendVideoImage(int* size ,std::vector<char>* data)
+{
+    std::cout << "发送视频数据" << *size << '\n';
+    asio::async_write(*clientSocket , asio::buffer(size , sizeof(int)) , [this ,size , data](asio::error_code ec, size_t length){
+        asio::async_write(*clientSocket , asio::buffer(data->data() , 570000) , [this,size , data](asio::error_code ec, size_t length){
+            std::cout << "视频数据发送成功\n";
+            // 在完成处理后释放内存
+            delete data;
+            delete size;
+        });
+    });
+}
+
+void ChatClient::acceptVideoChatRequest(int status)
+{
+    PacketHeaderServer header{videChaiHuiYing};
+    std::vector<char> header_buffer(sizeof(PacketHeaderServer));
+    std::memcpy(header_buffer.data() , &header ,sizeof(PacketHeaderServer));
+    asio::write(*clientSocket,asio::buffer(header_buffer, sizeof(PacketHeaderServer)));
+
+    asio::write(*clientSocket,asio::buffer(&status, sizeof(int)));
+}
+
+void ChatClient::sendVideoChatRequest(std::string SenderName , std::string ReceiverName)
+{
+    PacketHeader header_video{videoChatRespone};
+    std::vector<char> header_buffer(sizeof(PacketHeader));
+    std::memcpy(header_buffer.data() , &header_video ,sizeof(PacketHeader));
+    asio::write(*clientSocket , asio::buffer(header_buffer , sizeof(header_buffer)));
+
+    
+    addFrirendReauest request_video;
+    std::memset(request_video.ReceiverName , '\0' , sizeof(request_video.ReceiverName));
+    std::memset(request_video.SenderName , '\0' , sizeof(request_video.SenderName));
+    strncpy(request_video.SenderName , SenderName.c_str(), sizeof(request_video.SenderName) - 1);
+    strncpy(request_video.ReceiverName , ReceiverName.c_str() , sizeof(request_video.ReceiverName) - 1);
+    std::vector<char> request_buffer(sizeof(addFrirendReauest));
+    memset(request_buffer.data(),'\0',sizeof(addFrirendReauest));
+    std::memcpy(request_buffer.data() , &request_video ,sizeof(addFrirendReauest));
+    asio::write(*clientSocket , asio::buffer(request_buffer, sizeof(addFrirendReauest)));
+
+}
+
 
 void ChatClient::acceptAudioMessage()
 {
@@ -584,6 +770,10 @@ void ChatClient::sendFile(long long remainingSize , std::ifstream * inputFile  ,
 //接受文件数据包
 void ChatClient::acceptFileMessage(long long remainingSize , std::ofstream* outputFile , std::string fileName )
 {
+    if (!outputFile || !outputFile->is_open()) {
+        std::cerr << "Error: Invalid output file stream!" << std::endl;
+        return;
+    }
     if(!isAccept)
     {
         acceptMessage();

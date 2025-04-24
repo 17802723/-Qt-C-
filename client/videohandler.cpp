@@ -3,3 +3,8 @@
 VideoHandler::VideoHandler(QObject *parent)
     : QObject{parent}
 {}
+
+VideoHandler::~VideoHandler()
+{
+
+}

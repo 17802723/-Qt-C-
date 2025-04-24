@@ -80,6 +80,11 @@ void ShadowWindow::setLoginWin()
     connect(&server , &chat_server::stopAudio , this ,[this](){
         server.stopvideo();
     });
+    connect(&server , &chat_server::videoChat_audio , this ,[this](){
+        server.startVideoChat_audio();
+    });
+
+
 
     int login_num = stackedWidget->addWidget(logginWidget);
     int reg_num = stackedWidget->addWidget(regi);

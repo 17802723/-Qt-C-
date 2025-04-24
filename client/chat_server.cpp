@@ -18,8 +18,13 @@
 #include <QProcess>
 #include <QTextDocument>
 #include <QTextBlock>
+#include <memory>
+#include <QtConcurrent/QtConcurrent>
+
 //QString chat_server::server_ip = "192.168.202.132";
-QString chat_server::server_ip = "";
+QString chat_server::server_ip = "10.10.129.231";
+
+//QString chat_server::server_ip = "47.122.48.34";
 
 int chat_server::server_port = 1145;
 
@@ -55,6 +60,8 @@ void chat_server::connectToServer()
     {
         qDebug() << "Exception: " << e.what();
     }
+
+
 }
 
 
@@ -149,6 +156,15 @@ int chat_server::LoginUser(std::string usernameRegister, std::string passwordReg
     {
         username = usernameRegister;
         password = usernameRegister;
+
+        videoChat = new videoChatWidget;
+        //connect(videoChat , &videoChatWidget::newImageData , videoChat , &videoChatWidget::acceptImageData);
+        connect(videoChat , &videoChatWidget::acceptCall , this , &chat_server::sendVideoChatStatusChange);
+        connect(videoChat , &videoChatWidget::endCall , this , &chat_server::sendVideoChatStatusChange);
+        connect(videoChat , &videoChatWidget::rejectCall , this , &chat_server::sendVideoChatStatusChange);
+
+
+
         qDebug() << "登录成功";
         return 0;
 
@@ -165,6 +181,7 @@ int chat_server::LoginUser(std::string usernameRegister, std::string passwordReg
         return 2;
 
     }
+
 
 
 }
@@ -209,6 +226,7 @@ void chat_server::acceptMessage()
                         emit serachFriendRes(response->status_code);
                     }
                     acceptMessage();
+
                 }
                 );
         }
@@ -407,6 +425,48 @@ void chat_server::acceptMessage()
             else
             {
                 emit requestStopCapture();
+            }
+            acceptMessage();
+        }
+        else if(serverHeader->message_type == videoChatRespone)
+        {
+            addFrirendReauest* FrirendRequest =new addFrirendReauest;
+            std::memset(FrirendRequest->ReceiverName , '\0' , sizeof(FrirendRequest->ReceiverName));
+            std::memset(FrirendRequest->SenderName , '\0' , sizeof(FrirendRequest->SenderName));
+            asio::read(*server_socket , asio::buffer(FrirendRequest , sizeof(addFrirendReauest)));
+            qDebug() << "用户:" << FrirendRequest->SenderName << "向" << FrirendRequest->ReceiverName << "发起视频通话请求\n";
+
+
+
+
+
+            // 使用信号槽机制在主线程中开启摄像头
+            QMetaObject::invokeMethod(this, [this,FrirendRequest]() {
+                videoChat->start();
+                videoChat->show();
+                videoChat->setName(FrirendRequest->ReceiverName , FrirendRequest->SenderName);
+                videoChat->setStatus(1);
+                delete FrirendRequest;
+            }, Qt::QueuedConnection);
+
+            acceptMessage();
+
+        }
+        else if(serverHeader->message_type == videChaiHuiYing)
+        {
+            int status;
+            asio::read(*server_socket , asio::buffer(&status , sizeof(int)));
+            if(status == 0)
+            {
+                QMetaObject::invokeMethod(this, [this]() {
+                    videoChat->setStatus(2);
+                }, Qt::QueuedConnection);
+                startVideoChat();
+            }
+            else
+            {
+                videoChat->stop();
+                videoChat->hide();
             }
             acceptMessage();
         }
@@ -996,6 +1056,35 @@ void chat_server::sendFile_tuoru(QString filePath, const QString &receiverName, 
 
 }
 
+void chat_server::sendVideoChat(QString senderName, QString receiverName)
+{
+
+    videoChat->setName(QString::fromStdString(username) , senderName.toStdString() == username ? receiverName : senderName);
+
+    qDebug() << senderName << "向" << receiverName << "发起通讯请求";
+    PacketHeader header{videoChatRespone};
+    std::vector<char> header_buffer(sizeof(PacketHeader));
+    std::memcpy(header_buffer.data() , &header ,sizeof(PacketHeader));
+    asio::write(*server_socket , asio::buffer(header_buffer));
+
+    addFrirendReauest request;
+    std::memset(request.ReceiverName , '\0' , sizeof(request.ReceiverName));
+    std::memset(request.SenderName , '\0' , sizeof(request.SenderName));
+    strncpy(request.SenderName , username.c_str() , sizeof(request.SenderName) - 1);
+    std::string receivername = receiverName.toUtf8().constData();
+    strncpy(request.ReceiverName , receivername.c_str() , sizeof(request.ReceiverName) - 1);
+    std::vector<char> request_buffer(sizeof(addFrirendReauest));
+    memset(request_buffer.data(),'\0',sizeof(addFrirendReauest));
+    std::memcpy(request_buffer.data() , &request ,sizeof(addFrirendReauest));
+    asio::write(*server_socket , asio::buffer(request_buffer, sizeof(addFrirendReauest)));
+
+
+    videoChat->start();
+    videoChat->show();
+    videoChat->setStatus(0);
+
+}
+
 
 void chat_server::sendFileMessage(long long* remainingSize , QFile* inputFile , QString fileName)
 {
@@ -1289,3 +1378,309 @@ void chat_server::stopvideo()
     asio::write(*SendAudioSocekt , asio::buffer(&length , sizeof(int)));
 
 }
+
+void chat_server::sendVideoChatStatusChange(int index)
+{
+    int status = index;
+
+    if(videoChat->chatStatus == 2)
+    {
+        delete videoSocket;
+        delete videoSocket_audio;
+        videoSocket = nullptr;
+        videoSocket_audio = nullptr;
+        isTransVideo = false;
+        isVideoChat_audio = false;
+        videoChat->stop();
+        videoChat->close();
+        audioChat->stopCapture();
+        audioChat->stopPlayback();
+
+    }
+    else
+    {
+        //发送包头
+        PacketHeader header{videChaiHuiYing};
+        std::vector<char> header_buffer(sizeof(PacketHeader));
+        std::memcpy(header_buffer.data() , &header ,sizeof(PacketHeader));
+        asio::write(*server_socket , asio::buffer(header_buffer , sizeof(PacketHeader)));
+
+        addFrirendReauest request;
+        std::memset(request.ReceiverName , '\0' , sizeof(request.ReceiverName));
+        std::memset(request.SenderName , '\0' , sizeof(request.SenderName));
+        strncpy(request.SenderName , username.c_str() , sizeof(request.SenderName) - 1);
+        strncpy(request.ReceiverName , videoChat->chatUser().toStdString().c_str() , sizeof(request.ReceiverName) - 1);
+        std::vector<char> request_buffer(sizeof(addFrirendReauest));
+        memset(request_buffer.data(),'\0',sizeof(addFrirendReauest));
+        std::memcpy(request_buffer.data() , &request ,sizeof(addFrirendReauest));
+        asio::write(*server_socket , asio::buffer(request_buffer, sizeof(addFrirendReauest)));
+
+        asio::write(*server_socket , asio::buffer(&status, sizeof(int)));
+
+        //qDebug() << status << " " << username << " " << videoChat->chatUser();
+
+        if(status == 1 || status == 2)
+        {
+            qDebug() << status << " " << username << " " << videoChat->chatUser();
+            videoChat->stop();
+            videoChat->close();
+            // QMetaObject::invokeMethod(this, [this]() {
+
+            // }, Qt::QueuedConnection);
+            //videoChat->close();
+        }
+        else if(status == 0)
+        {
+            videoChat->setStatus(2);
+            startVideoChat();
+        }
+    }
+
+}
+
+void chat_server::startVideoChat()
+{
+    if(videoSocket == nullptr)
+    {
+        // 解析服务器地址和端口，得到服务器的端点（endpoint）
+        asio::ip::tcp::resolver resolver(*server_io_context);
+        auto endpoints = resolver.resolve(server_ip.toStdString(),std::to_string(server_port));
+
+        // 创建 socket 连接到服务器
+        videoSocket = new asio::ip::tcp::socket(*server_io_context);
+        asio::connect(*videoSocket,endpoints);
+        if(shiPinCishu == false)
+        {
+            connect(videoChat , &videoChatWidget::newImageData , this , [this](const QByteArray &image){
+                static QElapsedTimer sendTimer;
+                static bool isFirstSend = true;
+
+                // 控制发送频率，限制为每20ms发送一次
+                if (!isFirstSend && sendTimer.elapsed() < 20) {
+                    return;
+                }
+
+                if (isFirstSend) {
+                    sendTimer.start();
+                    isFirstSend = false;
+                } else {
+                    sendTimer.restart();
+                }
+                //qDebug() << "要发送图片" <<"数据";
+                if(isTransVideo)
+                {
+
+                    int size = image.size();
+                    QByteArray* video = new QByteArray(image);
+                    qDebug() << "要发送" << size <<"数据";
+                    const int MAX_ALLOWED_SIZE = 10 * 1024 * 1024; // 例如限制为10MB
+                    if(size <= 0 || size > MAX_ALLOWED_SIZE) {
+                        videoChat->close();
+                        qDebug() << "接收到无效的视频数据大小: "  << size << "视频数据\n";
+                    }
+
+
+
+                    asio::async_write(*videoSocket , asio::buffer(&size , sizeof(int)) ,[this  , video](asio::error_code ec, size_t length){
+                        if(ec)
+                            return;
+                        std::vector<char> video_buffer(video->size() + 10);
+
+                        memset(video_buffer.data(),'\0',video->size() + 10);
+                        std::memcpy(video_buffer.data() , video->data() ,video->size());
+                        asio::async_write(*videoSocket , asio::buffer(video_buffer.data() , video->size()) ,[this  , video](asio::error_code ec, size_t length){
+                            delete video;
+                        });
+                    });
+                }
+            });
+            shiPinCishu = true;
+        }
+    }
+
+
+
+
+
+    PacketHeader header{videoSocketBiaoZhu};
+    std::vector<char> header_buffer(sizeof(PacketHeader));
+    std::memcpy(header_buffer.data() , &header ,sizeof(PacketHeader));
+    asio::write(*videoSocket , asio::buffer(header_buffer , sizeof(PacketHeader)));
+
+    //用类似的包，sender代表当前用户，receiver代表聊天的用户
+    addFrirendReauest request;
+    std::memset(request.ReceiverName , '\0' , sizeof(request.ReceiverName));
+    std::memset(request.SenderName , '\0' , sizeof(request.SenderName));
+    strncpy(request.SenderName , username.c_str() , sizeof(request.SenderName) - 1);
+    strncpy(request.ReceiverName , videoChat->chatUser().toStdString().c_str() , sizeof(request.ReceiverName) - 1);
+    std::vector<char> request_buffer(sizeof(addFrirendReauest));
+    memset(request_buffer.data(),'\0',sizeof(addFrirendReauest));
+    std::memcpy(request_buffer.data() , &request ,sizeof(addFrirendReauest));
+    asio::write(*videoSocket , asio::buffer(request_buffer, sizeof(addFrirendReauest)));
+
+
+    emit videoChat_audio();
+
+    isTransVideo = true;
+    acceptVideoMessage();
+
+
+
+
+}
+
+void chat_server::acceptVideoMessage()
+{
+
+    int* size;
+    size = new int;
+    asio::async_read(*videoSocket , asio::buffer(size , sizeof(int)) , [this , size](asio::error_code ec, size_t length){
+        if (ec)
+        {
+            // 其他错误
+            try
+            {
+                throw asio::system_error(ec);
+            }
+            catch(const std::exception& e)
+            {
+                if(isTransVideo == false)
+                    return;
+                delete videoSocket;
+                videoSocket = nullptr;
+                isTransVideo = false;
+                startVideoChat();
+            }
+
+            return;
+        }
+
+        if(*size == -1)
+        {
+            qDebug() << "结束视频传输";
+            return;
+        }
+        QByteArray* data = new QByteArray(*size, Qt::Uninitialized);
+        asio::async_read(*videoSocket , asio::buffer(data->data() , *size) , [this , data  , size](asio::error_code ec, size_t length){
+            //qDebug() << "接收到视频数据："<<*size;
+            videoChat->acceptImageData(*data);
+            delete data;
+            delete size;
+            acceptVideoMessage();
+
+        });
+    });
+}
+
+void chat_server::startVideoChat_audio()
+{
+    if(videoSocket_audio == nullptr)
+    {
+        // 解析服务器地址和端口，得到服务器的端点（endpoint）
+        asio::ip::tcp::resolver resolver(*server_io_context);
+        auto endpoints = resolver.resolve(server_ip.toStdString(),std::to_string(server_port));
+
+        // 创建 socket 连接到服务器
+        videoSocket_audio = new asio::ip::tcp::socket(*server_io_context);
+        asio::connect(*videoSocket_audio,endpoints);
+
+        if(!audioChat)
+        {
+            audioChat = new AudioHandler;
+            audioChat->initialize();
+            audioChat->startCapture();
+            audioChat->startPlayback();
+            connect(audioChat , &AudioHandler::audioDataCaptured , this , [this](const QByteArray &data){
+                if(isVideoChat_audio == true)
+                {
+                    QByteArray* audioData = new QByteArray(data);
+                    int size = audioData->size();
+                    asio::async_write(*videoSocket_audio , asio::buffer(&size , sizeof(int)) , [this , audioData](asio::error_code ec, size_t length){
+                        asio::async_write(*videoSocket_audio , asio::buffer(audioData->data() , audioData->size()) , [this , audioData](asio::error_code ec, size_t length){
+                            qDebug() << "发送出音频数据："<< audioData->size();
+                            delete audioData;
+                        });
+                    });
+                }
+            });
+        }
+    }
+    if(isVideoChat_audio == false)
+    {
+        PacketHeader header{videoSocketBiaoZhu};
+        std::vector<char> header_buffer(sizeof(PacketHeader));
+        std::memcpy(header_buffer.data() , &header ,sizeof(PacketHeader));
+        asio::write(*videoSocket_audio , asio::buffer(header_buffer , sizeof(PacketHeader)));
+
+
+        //用类似的包，sender代表当前用户，receiver代表聊天的用户
+        addFrirendReauest request;
+        std::memset(request.ReceiverName , '\0' , sizeof(request.ReceiverName));
+        std::memset(request.SenderName , '\0' , sizeof(request.SenderName));
+        strncpy(request.SenderName , (username + "audio").c_str() , sizeof(request.SenderName) - 1);
+        strncpy(request.ReceiverName , (videoChat->chatUser().toStdString() + "audio").c_str() , sizeof(request.ReceiverName) - 1);
+        std::vector<char> request_buffer(sizeof(addFrirendReauest));
+        memset(request_buffer.data(),'\0',sizeof(addFrirendReauest));
+        std::memcpy(request_buffer.data() , &request ,sizeof(addFrirendReauest));
+        asio::write(*videoSocket_audio , asio::buffer(request_buffer, sizeof(addFrirendReauest)));
+
+        startAcceptVideo_audio();
+        isVideoChat_audio = true;
+
+
+    }
+}
+
+void chat_server::startAcceptVideo_audio()
+{
+    int* size;
+    size = new int;
+    asio::async_read(*videoSocket_audio , asio::buffer(size , sizeof(int)) , [this , size](asio::error_code ec, size_t length){
+        if (ec)
+        {
+            // 其他错误
+            try
+            {
+                throw asio::system_error(ec);
+            }
+            catch(const std::exception& e)
+            {
+                if(isVideoChat_audio == false)
+                    return;
+                delete videoSocket_audio;
+                videoSocket_audio = nullptr;
+                isVideoChat_audio = false;
+                emit videoChat_audio();
+            }
+
+            return;
+        }
+
+        if(*size == -1)
+        {
+            qDebug() << "结束视频传输";
+            delete videoSocket;
+            delete videoSocket_audio;
+            videoSocket = nullptr;
+            videoSocket_audio = nullptr;
+            isTransVideo = false;
+            isVideoChat_audio = false;
+            videoChat->stop();
+            videoChat->close();
+            audioChat->stopCapture();
+            audioChat->stopPlayback();
+            return;
+        }
+        QByteArray* data = new QByteArray(*size, Qt::Uninitialized);
+        asio::async_read(*videoSocket_audio , asio::buffer(data->data() , *size) , [this , data  , size](asio::error_code ec, size_t length){
+            qDebug() << "接收到视频数据："<<*size;
+            audioChat->receiveAudioData(*data);
+            delete data;
+            delete size;
+            startAcceptVideo_audio();
+
+        });
+    });
+}
+
+

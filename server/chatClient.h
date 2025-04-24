@@ -28,7 +28,10 @@ enum MessageType {
     acceptChatRequestHeader = 21 , //接收到通讯请求
     responeVoiceChatHeader = 22 , //回应电话通讯
     voiceChatRespone = 23 , //服务器给客户端回应语音消息
-    transAudioToServer = 24 //客户端传输音频给服务器
+    transAudioToServer = 24, //客户端传输音频给服务器
+    videoChatRespone = 25 ,//视频通话请求
+    videChaiHuiYing = 26, //回应视频通话
+    videoSocketBiaoZhu = 27 //标明当前socket是用于传输视频帧的
 };
 
 //客户端给服务端发的包头
@@ -171,6 +174,8 @@ private:
     
 public:
     std::string userName;
+    std::string videoChatCurrentName;//视频通话时用于标记当前socket是哪个用户的
+    std::string videoChatName;//视频通话时用于标记当前是跟哪个用户通话的
     //绑定到一个新客户
     void Session(std::shared_ptr<asio::ip::tcp::socket> socket);
     //接受客户端发送的信息
@@ -197,6 +202,10 @@ public:
     void responeVoice(bool status);
     //接受到客户端的音频数据
     void acceptAudioMessage();
+    void sendVideoChatRequest(std::string SenderName , std::string ReceiverName);
+    void acceptVideoChatRequest(int status);
+    void receiveVideoImage();
+    void sendVideoImage(int* size ,std::vector<char>* data);
     ChatClient();
     ~ChatClient();
 
